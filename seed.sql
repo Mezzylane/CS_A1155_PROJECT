@@ -1,19 +1,13 @@
--- ============================================================
 -- Seed data for University Room Booking System
--- ============================================================
 
--- -----------------------------------------------------------
 -- 1. Buildings
--- -----------------------------------------------------------
 INSERT INTO building (id, name, address) VALUES
   (1, 'Otakaari 1',    'Otakaari 1, 02150 Espoo'),
   (2, 'Maarintie 8',   'Maarintie 8, 02150 Espoo');
 
 SELECT setval(pg_get_serial_sequence('building', 'id'), 2);
 
--- -----------------------------------------------------------
 -- 2. Rooms
--- -----------------------------------------------------------
 INSERT INTO room (id, building_id, room_number, capacity, room_type) VALUES
   (1, 1, 'A101',  30,  'meeting_room'),
   (2, 1, 'A201',  60,  'lecture_room'),
@@ -23,9 +17,7 @@ INSERT INTO room (id, building_id, room_number, capacity, room_type) VALUES
 
 SELECT setval(pg_get_serial_sequence('room', 'id'), 5);
 
--- -----------------------------------------------------------
 -- 3. Equipment
--- -----------------------------------------------------------
 INSERT INTO equipment (id, equipment_name) VALUES
   (1, 'Projector'),
   (2, 'Whiteboard'),
@@ -34,9 +26,7 @@ INSERT INTO equipment (id, equipment_name) VALUES
 
 SELECT setval(pg_get_serial_sequence('equipment', 'id'), 4);
 
--- -----------------------------------------------------------
 -- 4. Room-Equipment links
--- -----------------------------------------------------------
 INSERT INTO room_equipment (room_id, equipment_id) VALUES
   (1, 1), (1, 2),                -- A101: Projector, Whiteboard
   (2, 1), (2, 2), (2, 3),        -- A201: Projector, Whiteboard, VC
@@ -44,9 +34,7 @@ INSERT INTO room_equipment (room_id, equipment_id) VALUES
   (4, 1), (4, 2), (4, 3),        -- M205: Projector, Whiteboard, VC
   (5, 2);                        -- M310: Whiteboard
 
--- -----------------------------------------------------------
 -- 5. Organizations
--- -----------------------------------------------------------
 INSERT INTO organization (id, org_name) VALUES
   (1, 'Aalto Game Developers'),
   (2, 'Photography Club'),
@@ -54,9 +42,7 @@ INSERT INTO organization (id, org_name) VALUES
 
 SELECT setval(pg_get_serial_sequence('organization', 'id'), 3);
 
--- -----------------------------------------------------------
 -- 6. Users
--- -----------------------------------------------------------
 INSERT INTO app_user (id, identifier, display_name) VALUES
   (1, 'matti.meikäläinen@aalto.fi', 'Matti Meikäläinen'),
   (2, 'liisa.virtanen@aalto.fi',    'Liisa Virtanen'),
@@ -64,18 +50,13 @@ INSERT INTO app_user (id, identifier, display_name) VALUES
 
 SELECT setval(pg_get_serial_sequence('app_user', 'id'), 3);
 
--- -----------------------------------------------------------
 -- 7. Recurring series
--- -----------------------------------------------------------
 INSERT INTO recurring_series (id, recurrence_rule, end_date) VALUES
   (1, 'FREQ=WEEKLY;BYDAY=MO', '2026-03-01');
 
 SELECT setval(pg_get_serial_sequence('recurring_series', 'id'), 1);
 
--- -----------------------------------------------------------
 -- 8. Bookings
--- -----------------------------------------------------------
-
 -- 8a. Recurring series #1 – 3 occurrences (Mondays)
 -- Occurrence 1: confirmed
 INSERT INTO booking (id, room_id, organization_id, user_id,

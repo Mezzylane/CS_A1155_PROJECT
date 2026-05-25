@@ -1,9 +1,6 @@
--- ============================================================
 -- Application Queries — University Room Booking System
--- ============================================================
 
--- Query 1: Bookings per room — List all bookings for room A201,
---          ordered by start time.
+-- Query 1: List all bookings for room A201, ordered by start time.
 SELECT
     b.id              AS booking_id,
     r.room_number,
@@ -17,8 +14,7 @@ JOIN organization o ON b.organization_id = o.id
 WHERE r.room_number = 'A201'
 ORDER BY b.start_time DESC;
 
--- Query 2: Most active organisations — Rank organisations by
---          number of confirmed bookings, showing the top 3.
+-- Query 2: Rank organisations by number of confirmed bookings, showing the top 3.
 SELECT
     o.org_name,
     COUNT(b.id) AS confirmed_bookings
@@ -29,8 +25,7 @@ GROUP BY o.org_name
 ORDER BY confirmed_bookings DESC
 LIMIT 3;
 
--- Query 3: Most used rooms — Rank rooms by total hours booked
---          (confirmed only), showing the top 3.
+-- Query 3: Rank rooms by total hours booked (confirmed only), showing the top 3.
 SELECT
     r.room_number,
     bld.name                                 AS building,
@@ -43,8 +38,7 @@ GROUP BY r.room_number, bld.name
 ORDER BY total_hours DESC
 LIMIT 3;
 
--- Query 4: Equipment in booked rooms — For a specific booking (id = 5),
---          list the equipment available in the booked room.
+-- Query 4: For a specific booking (id = 5), list the equipment available in the booked room.
 SELECT
     b.id            AS booking_id,
     r.room_number,
@@ -55,8 +49,7 @@ JOIN room_equipment re  ON r.id = re.room_id
 JOIN equipment e        ON re.equipment_id = e.id
 WHERE b.id = 5;
 
--- Query 5: Cancellation counts — Count cancelled bookings per
---          organisation.
+-- Query 5: Count cancelled bookings per organisation.
 SELECT
     o.org_name,
     COUNT(b.id) AS cancelled_bookings
@@ -66,8 +59,7 @@ WHERE b.status = 'cancelled'
 GROUP BY o.org_name
 ORDER BY cancelled_bookings DESC;
 
--- Query 6: Pending approvals — List all bookings that require
---          approval but have not yet been reviewed.
+-- Query 6: List all bookings that require approval but have not yet been reviewed.
 SELECT
     b.id            AS booking_id,
     r.room_number,
@@ -83,8 +75,7 @@ WHERE b.approval_required = TRUE
   AND b.approval_granted IS NULL
 ORDER BY b.start_time;
 
--- Query 7: Organisation booking history — Retrieve all bookings
---          for the Photography Club in 2026.
+-- Query 7: Retrieve all bookings for the Photography Club in 2026.
 SELECT
     b.id          AS booking_id,
     r.room_number,
@@ -101,8 +92,7 @@ WHERE o.org_name = 'Photography Club'
   AND b.start_time <  '2027-01-01'
 ORDER BY b.start_time;
 
--- Query 8: Conflict detection — Find bookings for the same room
---          whose time intervals overlap.
+-- Query 8: Find bookings for the same room whose time intervals overlap.
 SELECT
     r.room_number,
     a.id          AS booking_a,
