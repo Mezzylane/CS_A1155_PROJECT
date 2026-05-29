@@ -41,7 +41,6 @@ erDiagram
         varchar name
         text address
     }
-
     Room {
         int id PK
         int building_id FK
@@ -49,47 +48,42 @@ erDiagram
         int capacity
         enum room_type
     }
-
     Equipment {
         int id PK
         varchar equipment_name UK
     }
-
     RoomEquipment {
-        int room_id PK_FK
-        int equipment_id PK_FK
+        int room_id PK
+        int equipment_id PK
     }
-
     Organization {
         int id PK
         varchar org_name UK
     }
-
     AppUser {
         int id PK
         varchar identifier UK
-        varchar display_name "nullable"
+        varchar display_name
     }
-
     RecurringSeries {
         int id PK
         varchar recurrence_rule
         date end_date
     }
-
     Booking {
         int id PK
         int room_id FK
         int organization_id FK
         int user_id FK
-        int recurring_series_id FK "nullable"
+        int recurring_series_id FK
         timestamptz start_time
         timestamptz end_time
         enum status
-        boolean approval_required "nullable"
-        boolean approval_granted "nullable"
-        timestamptz cancelled_at "nullable"
-        text cancel_reason "nullable"
-        timestamptz override_start "nullable"
-        timestamptz override_end "nullable"
-    }```
+        boolean approval_required
+        boolean approval_granted
+        timestamptz cancelled_at
+        text cancel_reason
+        timestamptz override_start
+        timestamptz override_end
+    }
+```
