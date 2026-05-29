@@ -1,4 +1,8 @@
--- University Room Booking System
+-- University room booking database
+-- PostgreSQL schema
+
+-- Needed for the exclusion constraint that prevents overlapping room bookings.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 -- Stores physical buildings on campus.
 CREATE TABLE building (
@@ -49,7 +53,9 @@ CREATE TABLE app_user (
 CREATE TABLE recurring_series (
     id SERIAL PRIMARY KEY,
     recurrence_rule TEXT NOT NULL,
-    end_date DATE NOT NULL
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    CHECK (end_date >= start_date)
 );
 
 -- Core table: stores individual room reservations.
@@ -64,10 +70,31 @@ CREATE TABLE booking (
     start_time TIMESTAMP NOT NULL,
     end_time TIMESTAMP NOT NULL CHECK (end_time > start_time),
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'cancelled', 'rejected')),
-    approval_required BOOLEAN,
+    approval_required BOOLEAN NOT NULL DEFAULT FALSE,
     approval_granted BOOLEAN,
     cancelled_at TIMESTAMP,
     cancel_reason TEXT,
     override_start TIMESTAMP,
-    override_end TIMESTAMP CHECK (override_end IS NULL OR override_start IS NULL OR override_end > override_start)
+    override_end TIMESTAMP CHECK (override_end IS NULL OR override_start IS NULL OR override_end > override_start),
+    -- If approval is not required, there should not be an approval decision.
+    CHECK (approval_required OR approval_granted IS NULL),
+    -- A booking that requires approval cannot be confirmed before approval is granted.
+    CHECK (status <> 'confirmed' OR NOT approval_required OR approval_granted IS TRUE),
+    -- Cancellation fields are only used for cancelled bookings.
+    CHECK (
+        (status = 'cancelled' AND cancelled_at IS NOT NULL)
+        OR
+        (status <> 'cancelled' AND cancelled_at IS NULL AND cancel_reason IS NULL)
+    ),
+    -- Prevent active double-bookings for the same room.
+    EXCLUDE USING gist (
+        room_id WITH =,
+        tsrange(start_time, end_time, '[)') WITH &&
+    ) WHERE (status IN ('pending', 'confirmed'))
 );
+
+CREATE INDEX idx_room_building ON room(building_id);
+CREATE INDEX idx_booking_room_time ON booking(room_id, start_time, end_time);
+CREATE INDEX idx_booking_organization_time ON booking(organization_id, start_time);
+CREATE INDEX idx_booking_recurring_series ON booking(recurring_series_id);
+CREATE INDEX idx_booking_user ON booking(user_id);

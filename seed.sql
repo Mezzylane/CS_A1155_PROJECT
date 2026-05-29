@@ -36,13 +36,13 @@ INSERT INTO organization (org_name) VALUES
 
 -- 6. Users
 INSERT INTO app_user (identifier, display_name) VALUES
-  ('jean.sibelius@aalto.fi', 'Jean Sibelius'),
-  ('linus.torvalds@aalto.fi', 'Linus Torvalds'),
-  ('alvar.aalto@aalto.fi',  'Alvar Aalto');
+  ('user_001', 'Requester 1'),
+  ('user_002', 'Requester 2'),
+  ('user_003', 'Requester 3');
 
 -- 7. Recurring series
-INSERT INTO recurring_series (recurrence_rule, end_date) VALUES
-  ('FREQ=WEEKLY;BYDAY=MO', '2026-03-01');
+INSERT INTO recurring_series (recurrence_rule, start_date, end_date) VALUES
+  ('FREQ=WEEKLY;BYDAY=MO', '2026-02-09', '2026-03-01');
 
 -- 8. Bookings
 -- Recurring occurrence 1: confirmed
