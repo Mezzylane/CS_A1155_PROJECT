@@ -7,7 +7,7 @@ title: "Group Assignment: Submission Checklist"
 Group members (names and student numbers):
 
 - Mihhail Kriiva, 103324188
-- 
+- Nadil Ninduwara, 102502338
 -
 -
 -
