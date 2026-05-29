@@ -7,9 +7,8 @@ title: "Group Assignment: Submission Checklist"
 Group members (names and student numbers):
 
 - Mihhail Kriiva, 103324188
+- Nadil Ninduwara, 102502338
 - Manh Hung Nguyen, 103746368
--
--
 -
 
 Tick each box before submitting. The boxes under **Required** must all be ticked. The box under **Optional** concerns evaluation consent and is not required.
