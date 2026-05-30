@@ -1,73 +1,60 @@
-# Subject Analysis — University Room Booking System
+# Subject Analysis
 
-## 1. Candidate Subjects
+## Candidate Subjects
 
-| Subject | Description | Key Attributes |
+| Subject | Description | Main Attributes |
 |---|---|---|
 | **Building** | A physical building on campus. | name, address |
-| **Room** | A bookable space inside a building. | room_number, capacity, room_type (meeting_room / lecture_room / studio / workshop) |
-| **Equipment** | An item that may be present in a room. | equipment_name (projector, whiteboard, microphone, video camera) |
-| **RoomEquipment** | Junction linking rooms to their equipment. | (room_id, equipment_id) |
-| **Organization** | A student organisation that books rooms. | org_name |
-| **User** | The individual (student) who creates a booking on behalf of an organisation. Minimal personal data. | (identifier only — likely student number or email hash) |
-| **Booking** | A reservation of a room for a time period. | start_time, end_time, status (pending / confirmed / cancelled / rejected), cancelled_at, cancel_reason, approval_required (boolean), approval_granted (boolean) |
-| **RecurringSeries** | Parent entity for a set of bookings that repeat on a schedule. | recurrence_rule (e.g. "weekly Wednesday"), end_date |
-| **BookingOccurrence** | An individual booking that belongs to a recurring series. Supports independent cancellation or rescheduling. | override_start, override_end, occurrence_status (overrides series-level handling) |
+| **Room** | A bookable space inside a building. | room number, capacity, room type |
+| **Equipment** | An item that may be present in a room. | equipment name |
+| **RoomEquipment** | The link between rooms and equipment. | room id, equipment id |
+| **Organization** | A student organization that books rooms. | organization name |
+| **AppUser** | The person who creates a booking for an organization. | identifier, optional display name |
+| **RecurringSeries** | Parent entity for a set of repeated bookings. | recurrence rule, start date, end date |
+| **Booking** | A reservation of a room for a time period. | room, organization, user, start time, end time, status, approval fields, cancellation fields, optional time override |
 
-## 2. Candidate Relationships
+## Candidate Relationships
 
-| From | To | Cardinality | Notes |
-|---|---|---|---|
-| Building | Room | 1 : N | A room belongs to exactly one building. |
-| Room | RoomEquipment | 1 : N | A room can have many equipment items. |
-| Equipment | RoomEquipment | 1 : N | An equipment type can appear in many rooms. |
-| Organization | Booking | 1 : N | An organisation has many bookings. |
-| User | Booking | 1 : N | One person creates many bookings. |
-| Room | Booking | 1 : N | A room can be booked many times. |
-| RecurringSeries | BookingOccurrence | 1 : N | A series owns many occurrences. |
-| Booking | BookingOccurrence | 1 : 1 | Each occurrence maps to exactly one concrete booking record (or: BookingOccurrence *is-a* Booking with extra recurrence metadata). |
+| Relationship | Cardinality | Notes |
+|---|---|---|
+| Building to room | 1 : N | A room belongs to one building. A building can contain many rooms. |
+| Room to equipment | M : N | Implemented with `room_equipment`. A room can have many equipment items; an equipment type can appear in many rooms. |
+| Room to equipment via room_equipment | 1 : N | A room can be linked to many rows in `room_equipment`. |
+| Equipment to room_equipment | 1 : N | An equipment type can be linked to many rows in `room_equipment`. |
+| Room to booking | 1 : N | A room can be booked many times. A booking reserves exactly one room. |
+| Organization to booking | 1 : N | An organization has many bookings. Each booking belongs to one organization. |
+| AppUser to booking | 1 : N | One person creates many bookings. Each booking is created by one user. |
+| Recurring series to booking | optional 1 : N | A booking can be a one-off booking or part of one recurring series. |
 
-**Design choice for recurrence**: Either model `BookingOccurrence` as a separate child table of `RecurringSeries`, or fold recurrence fields directly into `Booking` with a nullable `recurring_series_id`. The latter is simpler and preferred for this project — see Assumptions.
+## Key Assumptions
 
-## 3. Key Assumptions
+1. A booking belongs to one organization only. Joint bookings are outside this design.
+2. Each booking uses exact start and end timestamps. The schema does not force 30-minute slots.
+3. Equipment is a property of the room, not of a single booking.
+4. Recurring bookings are stored as separate booking rows. The `recurring_series` row stores the repeating rule and date range, while each occurrence stores its own actual start and end time. An individual occurrence can also be moved to a different time using override start and end fields, without affecting the rest of the series.
+5. A cancelled booking remains in the database with `status = 'cancelled'`, `cancelled_at`, and an optional reason. This keeps booking history available for reports.
+6. Approval is stored on the booking because approval can depend on the room, date, organization, or other local rules. The schema prevents impossible combinations such as a granted approval when approval is not required.
+7. The database prevents overlapping active bookings in the same room. The normal booking workflow should still check availability before trying to insert or confirm a booking.
+8. User data is kept small. The schema stores a unique identifier and an optional display name only.
 
-1. **Minimal personal data**: A `User` record stores only a student/employee number (or a pseudonymous identifier). No name, email, or phone number is stored unless strictly required for contact about bookings. For the purposes of this project, we assume an opaque user ID is sufficient.
+## Ambiguous points and chosen interpretation
 
-2. **One organisation per booking**: A booking belongs to exactly one organisation. Joint bookings (multiple orgs sharing a room) are not supported.
-
-3. **Booking time granularity**: Bookings are recorded in 30-minute slots or exact timestamps. We assume exact `start_time` / `end_time` timestamps for maximum flexibility.
-
-4. **Overlap prevention is an application concern**: The schema does not enforce non-overlapping bookings declaratively; the application or a stored procedure checks for conflicts before confirming.
-
-5. **Cancellation handling**: Only `cancelled` bookings record `cancelled_at` and `cancel_reason`. `rejected` bookings do not need a reason stored (the system or admin rejects them).
-
-6. **Recurrence model**: We fold recurrence into the `Booking` table with a nullable `recurring_series_id`. All occurrences are materialised as individual `Booking` rows. The `RecurringSeries` table holds the rule. Individual occurrences can override their time (`override_start`, `override_end`) or status independently.
-
-7. **Equipment is a fixed catalogue**: Equipment types are pre-defined (projector, whiteboard, microphone, video camera). Adding new types requires an admin to insert into the `Equipment` table — no free-text entry.
-
-8. **Special access approval**: The `approval_required` flag is set per booking based on the room type or room-level policy. `approval_granted` is set by an admin. Both are nullable booleans — `NULL` means not applicable.
-
-## 4. Unclear / Ambiguous Requirements
-
-| Ambiguity | Interpretation Chosen |
+| Ambiguity | Interpretation chosen |
 |---|---|
-| What constitutes a "user" — is it just a student number, or do we need names, email, phone? | The case says "minimal personal data — only what is needed." We store only a unique identifier (e.g. Aalto student number or a hashed email) and optionally a display name. No contact details. |
-| Can a booking span multiple days? | Yes — `start_time` and `end_time` are full timestamps. Multi-day bookings are allowed unless business rules restrict them. |
-| Does "special access approval" apply to the room, the booking, or the organisation? | It applies to the booking. Some rooms require approval for any booking; the `approval_required` flag is set when the booking targets such a room. |
-| Can equipment be added to a booking, or is it just a room property? | Equipment is a property of the room, not the booking. The reporting requirement "equipment in booked rooms" implies joining through the room. |
-| For recurring bookings, what does "managed as a whole" mean? | The `RecurringSeries` table allows operations on the entire series (e.g. cancel all future occurrences). Individual rows can still be modified independently. |
-| What happens to cancelled occurrences in a recurring series — do they leave a gap? | Yes. The occurrence remains with status `cancelled`, but other occurrences in the series are unaffected. |
-| Should the system track *who* approved or rejected a booking? | The case does not mention this. We do not store an approver field. |
+| What personal data is needed for users? | Only a unique identifier is required. A display name is optional and only helps with readable reports. |
+| Are approval details mandatory? | No. The design supports approval when needed, but ordinary bookings can have `approval_required = false`. |
+| How should recurring bookings be represented? | A recurring series has a rule and date range, and every generated occurrence is stored as a normal booking row. This makes cancellation and reporting simple. |
+| Can an occurrence in a recurring series be changed by itself? | Yes. Since each occurrence is a booking row, its time or status can be changed without changing the whole series. |
+| Should the database store an approver or rejection reason? | Not in this version. The case does not clearly require it, so the design stays smaller. |
+| Should the database delete old cancelled bookings? | No automatic deletion is included. Retention would be a policy decision outside this project. |
 
-## 5. Likely Application Queries
+## Application queries covered by `queries.sql`
 
-1. **Bookings per room** — List all bookings (past and upcoming) for a given room, ordered by date.
-2. **Most active organisations** — Rank organisations by total number of confirmed bookings in a given time period.
-3. **Most used rooms** — Rank rooms by total hours booked (confirmed only) in a given time period.
-4. **Equipment in booked rooms** — For a given booking (or set of bookings), list the equipment available in the booked room.
-5. **Cancellation counts** — Count cancelled bookings per organisation, room, or time period; optionally average `cancelled_at - created_at` to measure lead time.
-6. **Pending approvals** — List all bookings where `approval_required = true` and `approval_granted IS NULL` (awaiting decision).
-7. **Room availability search** — Find all rooms of a given type with a given capacity that are free in a specified time window.
-8. **Recurring series overview** — For a given recurring series, list all occurrences with their individual statuses and any overrides.
-9. **Organisation booking history** — Retrieve all bookings (any status) for a specific organisation within a date range.
-10. **Conflict detection** — Find any bookings for the same room whose time intervals overlap (used during booking creation and audit).
+1. List bookings for a given room in a date range.
+2. Find rooms of a given type and minimum capacity that are free in a given time window.
+3. Summarize room usage, including confirmed hours and cancellation counts.
+4. List the equipment available for the room used by a booking.
+5. List bookings that still need an approval decision.
+6. Show one organization's booking history in a date range.
+7. List which equipment types appear most often in rooms that have had confirmed bookings.
+8. Find active bookings that overlap in the same room.

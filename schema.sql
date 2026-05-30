@@ -75,7 +75,7 @@ CREATE TABLE booking (
     cancelled_at TIMESTAMP,
     cancel_reason TEXT,
     override_start TIMESTAMP,
-    override_end TIMESTAMP CHECK (override_end IS NULL OR override_start IS NULL OR override_end > override_start),
+    override_end TIMESTAMP,
     -- If approval is not required, there should not be an approval decision.
     CHECK (approval_required OR approval_granted IS NULL),
     -- A booking that requires approval cannot be confirmed before approval is granted.
@@ -86,10 +86,16 @@ CREATE TABLE booking (
         OR
         (status <> 'cancelled' AND cancelled_at IS NULL AND cancel_reason IS NULL)
     ),
-    -- Prevent active double-bookings for the same room.
+    -- Override fields must either both be set with a valid range, or both be null.
+    CHECK (
+        (override_start IS NULL AND override_end IS NULL)
+        OR
+        (override_start IS NOT NULL AND override_end IS NOT NULL AND override_end > override_start)
+    ),
+    -- Prevent active double-bookings, accounting for time overrides.
     EXCLUDE USING gist (
         room_id WITH =,
-        tsrange(start_time, end_time, '[)') WITH &&
+        tsrange(COALESCE(override_start, start_time), COALESCE(override_end, end_time), '[)') WITH &&
     ) WHERE (status IN ('pending', 'confirmed'))
 );
 

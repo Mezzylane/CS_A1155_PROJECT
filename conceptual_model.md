@@ -1,4 +1,4 @@
-# Conceptual Model — University Room Booking System
+# Conceptual Model
 
 ## Entities
 | Entity | Attributes |

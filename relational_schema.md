@@ -1,185 +1,125 @@
-# Relational Schema — University Room Booking System
+# Relational Schema
 
-All tables use PostgreSQL naming conventions. Primary keys use `SERIAL` for auto-incrementing integers. Timestamps use `TIMESTAMPTZ` for timezone-aware storage.
+The schema is written for PostgreSQL. It uses `SERIAL` integer primary keys, `TEXT` columns for names and labels, and `CHECK` constraints for controlled values such as room type and booking status. It also uses PostgreSQL's `btree_gist` extension for the room-overlap exclusion constraint. The table definitions below match `schema.sql`.
 
----
+## `building`
 
-## Table: `building`
+Stores campus buildings.
 
-Stores physical buildings on campus.
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | `SERIAL` | primary key |
+| `name` | `TEXT` | not null |
+| `address` | `TEXT` | not null |
 
-| Column      | Type          | Constraints                          |
-|-------------|---------------|--------------------------------------|
-| `id`        | `SERIAL`      | `PRIMARY KEY`                        |
-| `name`      | `VARCHAR(255)` | `NOT NULL`                           |
-| `address`   | `TEXT`         | `NOT NULL`                           |
+## `room`
 
----
+Stores bookable rooms.
 
-## Table: `room`
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | `SERIAL` | primary key |
+| `building_id` | `INTEGER` | not null, foreign key to `building(id)` |
+| `room_number` | `TEXT` | not null |
+| `capacity` | `INTEGER` | not null, `capacity > 0` |
+| `room_type` | `TEXT` | not null, one of `meeting_room`, `lecture_room`, `studio`, `workshop` |
 
-Stores bookable spaces inside a building.
+`UNIQUE (building_id, room_number)` means the same room number can appear in different buildings, but not twice in the same building.
 
-An enum type `room_type` is used to constrain room categories.
+## `equipment`
 
-```sql
-CREATE TYPE room_type AS ENUM ('meeting_room', 'lecture_room', 'studio', 'workshop');
-```
+Stores the equipment catalogue.
 
-| Column        | Type          | Constraints                                    |
-|---------------|---------------|------------------------------------------------|
-| `id`          | `SERIAL`      | `PRIMARY KEY`                                  |
-| `building_id` | `INTEGER`     | `NOT NULL, FOREIGN KEY → building(id)`         |
-| `room_number` | `VARCHAR(50)` | `NOT NULL`                                     |
-| `capacity`    | `INTEGER`     | `NOT NULL, CHECK (capacity > 0)`               |
-| `room_type`   | `room_type`   | `NOT NULL`                                     |
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | `SERIAL` | primary key |
+| `equipment_name` | `TEXT` | not null, unique |
 
-- `building_id` is a foreign key referencing `building(id)`. A room must belong to exactly one building.
-- `room_number` is unique per building (application-enforced unique constraint or composite unique on `(building_id, room_number)`).
+The seed data uses Projector, Whiteboard, Video Conference System, and 3D Printer.
 
----
+## `room_equipment`
 
-## Table: `equipment`
+Links rooms to equipment. This resolves the many-to-many relationship.
 
-Stores the fixed catalogue of equipment types.
+| Column | Type | Constraints |
+|---|---|---|
+| `room_id` | `INTEGER` | not null, foreign key to `room(id)`, `ON DELETE CASCADE` |
+| `equipment_id` | `INTEGER` | not null, foreign key to `equipment(id)`, `ON DELETE CASCADE` |
 
-| Column          | Type          | Constraints                  |
-|-----------------|---------------|------------------------------|
-| `id`            | `SERIAL`      | `PRIMARY KEY`                |
-| `equipment_name`| `VARCHAR(100)` | `NOT NULL, UNIQUE`           |
+The primary key is `(room_id, equipment_id)`, so the same equipment type cannot be listed twice for the same room.
 
-Pre-seeded values: `projector`, `whiteboard`, `microphone`, `video camera`.
+## `organization`
 
----
+Stores student organizations.
 
-## Table: `room_equipment`
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | `SERIAL` | primary key |
+| `org_name` | `TEXT` | not null, unique |
 
-Linking table for the many-to-many relationship between `room` and `equipment`.  
-Each row indicates that a particular room contains a particular equipment type.
+## `app_user`
 
-| Column         | Type      | Constraints                                          |
-|----------------|-----------|------------------------------------------------------|
-| `room_id`      | `INTEGER` | `NOT NULL, FOREIGN KEY → room(id) ON DELETE CASCADE` |
-| `equipment_id` | `INTEGER` | `NOT NULL, FOREIGN KEY → equipment(id) ON DELETE CASCADE` |
+Stores the person who creates a booking. The table is called `app_user` because `user` is a PostgreSQL keyword.
 
-| Constraint                        | Columns                    |
-|-----------------------------------|----------------------------|
-| `PRIMARY KEY`                     | `(room_id, equipment_id)`  |
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | `SERIAL` | primary key |
+| `identifier` | `TEXT` | not null, unique |
+| `display_name` | `TEXT` | nullable |
 
-- Composite primary key enforces uniqueness — a room cannot have the same equipment type listed twice.
-- `ON DELETE CASCADE` ensures that deleting a room or equipment row cleans up the linking table.
+## `recurring_series`
 
----
+Stores the rule for repeated bookings.
 
-## Table: `organization`
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | `SERIAL` | primary key |
+| `recurrence_rule` | `TEXT` | not null |
+| `start_date` | `DATE` | not null |
+| `end_date` | `DATE` | not null, must be on or after `start_date` |
 
-Stores student organisations that can book rooms.
+The actual occurrences are stored in `booking`. This makes each occurrence easy to cancel, reject, or report on, while the series row keeps the overall recurrence rule and date range.
 
-| Column     | Type          | Constraints            |
-|------------|---------------|------------------------|
-| `id`       | `SERIAL`      | `PRIMARY KEY`          |
-| `org_name` | `VARCHAR(255)` | `NOT NULL, UNIQUE`     |
+## `booking`
 
----
+Stores each room reservation.
 
-## Table: `app_user`
+| Column | Type | Constraints / meaning |
+|---|---|---|
+| `id` | `SERIAL` | primary key |
+| `room_id` | `INTEGER` | not null, foreign key to `room(id)` |
+| `organization_id` | `INTEGER` | not null, foreign key to `organization(id)` |
+| `user_id` | `INTEGER` | not null, foreign key to `app_user(id)` |
+| `recurring_series_id` | `INTEGER` | nullable, foreign key to `recurring_series(id)`, `ON DELETE SET NULL` |
+| `start_time` | `TIMESTAMP` | not null |
+| `end_time` | `TIMESTAMP` | not null, must be after `start_time` |
+| `status` | `TEXT` | not null, one of `pending`, `confirmed`, `cancelled`, `rejected` |
+| `approval_required` | `BOOLEAN` | not null, default false |
+| `approval_granted` | `BOOLEAN` | nullable |
+| `cancelled_at` | `TIMESTAMP` | nullable, required only when status is `cancelled` |
+| `cancel_reason` | `TEXT` | nullable, allowed only when status is `cancelled` |
+| `override_start` | `TIMESTAMP` | nullable, overrides `start_time` for a moved occurrence |
+| `override_end` | `TIMESTAMP` | nullable, overrides `end_time` for a moved occurrence, must be after `override_start` if both are set |
 
-Stores individuals (students) who create bookings. Named `app_user` to avoid conflicts with the PostgreSQL `user` reserved word. Minimal personal data by design.
+Important checks in `schema.sql`:
 
-| Column          | Type          | Constraints                    |
-|-----------------|---------------|--------------------------------|
-| `id`            | `SERIAL`      | `PRIMARY KEY`                  |
-| `identifier`    | `VARCHAR(100)` | `NOT NULL, UNIQUE`             |
-| `display_name`  | `VARCHAR(255)` | `NULL`                         |
+- `end_time > start_time`.
+- If both override fields are set, `override_end` must be after `override_start`.
+- If approval is not required, `approval_granted` must be null.
+- A booking that requires approval cannot be confirmed unless approval has been granted.
+- Cancellation fields are only used for cancelled bookings.
+- Active bookings for the same room cannot overlap. This is enforced with a PostgreSQL exclusion constraint over `room_id` and the effective time range, using `override_start`/`override_end` when set and falling back to `start_time`/`end_time` otherwise.
 
-- `identifier` stores an opaque student/employee number or hashed email.
-- `display_name` is an optional human-readable label.
+## Foreign key summary
 
----
+| Child table | Column | Parent table | Delete behavior |
+|---|---|---|---|
+| `room` | `building_id` | `building` | restrict |
+| `room_equipment` | `room_id` | `room` | cascade |
+| `room_equipment` | `equipment_id` | `equipment` | cascade |
+| `booking` | `room_id` | `room` | restrict |
+| `booking` | `organization_id` | `organization` | restrict |
+| `booking` | `user_id` | `app_user` | restrict |
+| `booking` | `recurring_series_id` | `recurring_series` | set null |
 
-## Table: `recurring_series`
-
-Stores the recurrence rule for a set of bookings that repeat on a schedule.  
-Individual occurrences are materialised as rows in the `booking` table (see below).
-
-| Column            | Type           | Constraints        |
-|-------------------|----------------|--------------------|
-| `id`              | `SERIAL`       | `PRIMARY KEY`      |
-| `recurrence_rule` | `VARCHAR(255)` | `NOT NULL`         |
-| `end_date`        | `DATE`         | `NOT NULL`         |
-
-- `recurrence_rule` stores a human-readable or iCalendar RRULE string (e.g. `"weekly Wednesday"` or `"FREQ=WEEKLY;BYDAY=WE"`).
-- `end_date` is the date after which no more occurrences are generated.
-
----
-
-## Table: `booking`
-
-Stores individual room reservations. This is the core table.  
-Recurrence is handled by an optional link to `recurring_series`. Individual occurrences in a recurring series are materialised as separate `booking` rows.
-
-An enum type `booking_status` is used for the booking lifecycle.
-
-```sql
-CREATE TYPE booking_status AS ENUM ('pending', 'confirmed', 'cancelled', 'rejected');
-```
-
-| Column                 | Type             | Constraints                                                       | Nullable |
-|------------------------|------------------|-------------------------------------------------------------------|----------|
-| `id`                   | `SERIAL`         | `PRIMARY KEY`                                                     | NO       |
-| `room_id`              | `INTEGER`        | `NOT NULL, FOREIGN KEY → room(id)`                                | NO       |
-| `organization_id`      | `INTEGER`        | `NOT NULL, FOREIGN KEY → organization(id)`                        | NO       |
-| `user_id`              | `INTEGER`        | `NOT NULL, FOREIGN KEY → app_user(id)`                            | NO       |
-| `recurring_series_id`  | `INTEGER`        | `FOREIGN KEY → recurring_series(id) ON DELETE SET NULL`           | YES      |
-| `start_time`           | `TIMESTAMPTZ`    | `NOT NULL`                                                        | NO       |
-| `end_time`             | `TIMESTAMPTZ`    | `NOT NULL, CHECK (end_time > start_time)`                         | NO       |
-| `status`               | `booking_status` | `NOT NULL, DEFAULT 'pending'`                                     | NO       |
-| `approval_required`    | `BOOLEAN`        | —                                                                 | YES      |
-| `approval_granted`     | `BOOLEAN`        | —                                                                 | YES      |
-| `cancelled_at`         | `TIMESTAMPTZ`    | —                                                                 | YES      |
-| `cancel_reason`        | `TEXT`           | —                                                                 | YES      |
-| `override_start`       | `TIMESTAMPTZ`    | —                                                                 | YES      |
-| `override_end`         | `TIMESTAMPTZ`    | `CHECK (override_end > override_start)`                           | YES      |
-
-**Notes on nullable columns:**
-
-- `recurring_series_id` — `NULL` for one-off (non-recurring) bookings. When set, this booking is part of a recurring series.
-- `approval_required` — `NULL` means not applicable (room does not require approval). `TRUE` means approval is needed; `FALSE` means explicitly not required.
-- `approval_granted` — `NULL` means no decision yet. `TRUE` = approved, `FALSE` = denied.
-- `cancelled_at` — only populated when `status = 'cancelled'`.
-- `cancel_reason` — only populated when `status = 'cancelled'`.
-- `override_start` / `override_end` — only populated for recurring-series bookings that have been rescheduled from the series default time. When both are `NULL`, the occurrence uses the time computed from `recurring_series.recurrence_rule`.
-
----
-
-## Summary of Foreign Key Relationships
-
-| Child Table       | Column                | Parent Table      | Parent Column | On Delete       |
-|-------------------|-----------------------|-------------------|---------------|-----------------|
-| `room`            | `building_id`         | `building`        | `id`          | _(default: restrict)_ |
-| `room_equipment`  | `room_id`             | `room`            | `id`          | `CASCADE`       |
-| `room_equipment`  | `equipment_id`        | `equipment`       | `id`          | `CASCADE`       |
-| `booking`         | `room_id`             | `room`            | `id`          | _(default: restrict)_ |
-| `booking`         | `organization_id`     | `organization`    | `id`          | _(default: restrict)_ |
-| `booking`         | `user_id`             | `app_user`        | `id`          | _(default: restrict)_ |
-| `booking`         | `recurring_series_id` | `recurring_series`| `id`          | `SET NULL`      |
-
-- `ON DELETE CASCADE` on `room_equipment` means deleting a room or equipment type automatically removes the link.
-- `ON DELETE SET NULL` on `booking.recurring_series_id` means deleting a recurring series does not delete the individual bookings — they become standalone one-off bookings.
-- All other foreign keys default to `ON DELETE RESTRICT` (or `NO ACTION`), preventing deletion of parent records while child records exist.
-
----
-
-## Entity-Relationship-to-Table Mapping Summary
-
-| ER Entity / Relationship | Relational Table    | Notes                                  |
-|--------------------------|---------------------|----------------------------------------|
-| Building                 | `building`          |                                        |
-| Room                     | `room`              | FK to `building`                       |
-| Equipment                | `equipment`         |                                        |
-| Room–Equipment (M:N)     | `room_equipment`    | Linking table, composite PK            |
-| Organization             | `organization`      |                                        |
-| User                     | `app_user`          | Renamed from `user` (reserved word)    |
-| Booking                  | `booking`           | Core table, FK to room, org, user      |
-| RecurringSeries          | `recurring_series`  | Optional parent for recurring bookings |
-| BookingOccurrence        | _(folded into `booking`)_ | Via nullable `recurring_series_id` + override columns |
+Indexes are added for the most common joins and filters: room/time searches, organization history, user lookups, and recurring-series lookups. The exclusion constraint also supports the no-overlap rule for active bookings.

@@ -15,9 +15,9 @@ JOIN organization AS o ON b.organization_id = o.id
 JOIN building AS bld ON r.building_id = bld.id
 WHERE bld.name = 'Maarintie 8'
   AND r.room_number = 'A201'
-  AND b.start_time >= TIMESTAMP '2026-01-01 00:00:00'
-  AND b.start_time <  TIMESTAMP '2027-01-01 00:00:00'
-ORDER BY b.start_time;
+  AND COALESCE(b.override_start, b.start_time) >= TIMESTAMP '2026-01-01 00:00:00'
+  AND COALESCE(b.override_start, b.start_time) <  TIMESTAMP '2027-01-01 00:00:00'
+ORDER BY COALESCE(b.override_start, b.start_time);
 
 -- Query 2: Find lecture rooms with capacity at least 50 that are free on 2026-06-10 from 09:00 to 12:00.
 SELECT
@@ -48,7 +48,7 @@ SELECT
     COUNT(b.id) FILTER (WHERE b.status = 'cancelled') AS cancelled_bookings,
     ROUND(
         COALESCE(
-            SUM(EXTRACT(EPOCH FROM (b.end_time - b.start_time)) / 3600)
+            SUM(EXTRACT(EPOCH FROM (COALESCE(b.override_end, b.end_time) - COALESCE(b.override_start, b.start_time))) / 3600)
                 FILTER (WHERE b.status = 'confirmed'),
             0
         )::numeric,
@@ -58,8 +58,8 @@ FROM room AS r
 JOIN building AS bld ON r.building_id = bld.id
 LEFT JOIN booking AS b
     ON b.room_id = r.id
-   AND b.start_time >= TIMESTAMP '2026-01-01 00:00:00'
-   AND b.start_time <  TIMESTAMP '2027-01-01 00:00:00'
+   AND COALESCE(b.override_start, b.start_time) >= TIMESTAMP '2026-01-01 00:00:00'
+   AND COALESCE(b.override_start, b.start_time) <  TIMESTAMP '2027-01-01 00:00:00'
 GROUP BY bld.name, r.room_number
 ORDER BY confirmed_hours DESC, total_bookings DESC, bld.name, r.room_number;
 
@@ -75,17 +75,7 @@ JOIN equipment AS e ON re.equipment_id = e.id
 WHERE b.id = 5
 ORDER BY e.equipment_name;
 
--- Query 5: Count cancelled bookings per organization.
-SELECT
-    o.org_name,
-    COUNT(b.id) AS cancelled_bookings
-FROM booking AS b
-JOIN organization AS o ON b.organization_id = o.id
-WHERE b.status = 'cancelled'
-GROUP BY o.org_name
-ORDER BY cancelled_bookings DESC;
-
--- Query 6: List bookings that require approval and have not yet been reviewed.
+-- Query 5: List bookings that require approval and have not yet been reviewed.
 SELECT
     b.id AS booking_id,
     r.room_number,
@@ -102,7 +92,7 @@ WHERE b.approval_required = TRUE
   AND b.status = 'pending'
 ORDER BY b.start_time;
 
--- Query 7: Booking history for Salsa Club in 2026.
+-- Query 6: Booking history for Salsa Club in 2026.
 SELECT
     b.id AS booking_id,
     r.room_number,
@@ -115,9 +105,20 @@ JOIN organization AS o ON b.organization_id = o.id
 JOIN room AS r ON b.room_id = r.id
 JOIN app_user AS u ON b.user_id = u.id
 WHERE o.org_name = 'Salsa Club'
-  AND b.start_time >= TIMESTAMP '2026-01-01 00:00:00'
-  AND b.start_time <  TIMESTAMP '2027-01-01 00:00:00'
-ORDER BY b.start_time;
+  AND COALESCE(b.override_start, b.start_time) >= TIMESTAMP '2026-01-01 00:00:00'
+  AND COALESCE(b.override_start, b.start_time) <  TIMESTAMP '2027-01-01 00:00:00'
+ORDER BY COALESCE(b.override_start, b.start_time);
+
+-- Query 7: List equipment types ranked by how often they appear in rooms that have had confirmed bookings.
+SELECT
+    e.equipment_name,
+    COUNT(DISTINCT b.id) AS confirmed_booking_count
+FROM equipment AS e
+JOIN room_equipment AS re ON e.id = re.equipment_id
+JOIN booking AS b ON re.room_id = b.room_id
+WHERE b.status = 'confirmed'
+GROUP BY e.equipment_name
+ORDER BY confirmed_booking_count DESC;
 
 -- Query 8: Check whether any active bookings overlap in the same room.
 -- Expected with the seed data: no rows, because the schema prevents active overlaps.
@@ -135,7 +136,7 @@ JOIN booking AS b2
    AND b1.id < b2.id
    AND b1.status IN ('pending', 'confirmed')
    AND b2.status IN ('pending', 'confirmed')
-   AND b1.start_time < b2.end_time
-   AND b2.start_time < b1.end_time
+    AND COALESCE(b1.override_start, b1.start_time) < COALESCE(b2.override_end, b2.end_time)
+    AND COALESCE(b2.override_start, b2.start_time) < COALESCE(b1.override_end, b1.end_time)
 JOIN room AS r ON b1.room_id = r.id
 ORDER BY r.room_number, b1.start_time;
